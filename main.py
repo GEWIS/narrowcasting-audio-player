@@ -1,4 +1,6 @@
+import os
 import socketio
+from dotenv import load_dotenv
 from pydub import AudioSegment
 from pydub.playback import _play_with_simpleaudio
 from simpleaudio.shiny import PlayObject
@@ -7,6 +9,7 @@ import requests
 import logging
 import traceback
 
+load_dotenv()
 
 running = True
 sio = socketio.Client()
@@ -18,14 +21,12 @@ playback: PlayObject | None = None
 def main():
     global sio, audio_original, playback, running
 
-    url = 'http://localhost:3000/auth/mock'
+    url = os.environ['URL'] + '/auth/mock'
     result = requests.post(url)
     cookie = result.cookies.get('connect.sid')
 
-    print(cookie)
-
     # Initialize SocketIO
-    sio.connect('http://127.0.0.1:3000', headers={'cookie_development': 'connect.sid=' + cookie},
+    sio.connect(os.environ['URL'], headers={'cookie_development': 'connect.sid=' + cookie},
                 namespaces=['/audio'])
 
     # Load audio file from a remote source (replace 'your_audio_url' with the actual URL)
