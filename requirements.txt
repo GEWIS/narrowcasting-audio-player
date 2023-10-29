@@ -1,0 +1,5 @@
+pydub==0.25.1
+python-socketio==5.10.0
+requests==2.31.0
+simpleaudio==1.0.4
+websocket-client==1.6.4
