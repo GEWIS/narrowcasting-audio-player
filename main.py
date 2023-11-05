@@ -1,4 +1,5 @@
 import os
+from io import BytesIO
 import socketio
 from dotenv import load_dotenv
 from pydub import AudioSegment
@@ -10,10 +11,13 @@ import logging
 import traceback
 
 load_dotenv()
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=LOG_LEVEL)
 
+namespace = '/audio'
 running = True
 sio = socketio.Client()
-audio_original: AudioSegment
+audio_original: AudioSegment | None = None
 audio_timestamped: AudioSegment | None = None
 playback: PlayObject | None = None
 
@@ -27,11 +31,7 @@ def main():
 
     # Initialize SocketIO
     sio.connect(os.environ['URL'], headers={'cookie_development': 'connect.sid=' + cookie},
-                namespaces=['/audio'])
-
-    # Load audio file from a remote source (replace 'your_audio_url' with the actual URL)
-    audio_url = 'rick.mp3'
-    audio_original = AudioSegment.from_mp3(audio_url)
+                namespaces=[namespace])
 
     print('Connected')
 
@@ -44,7 +44,7 @@ def main():
             playback.stop()
 
 
-@sio.event(namespace='/audio')
+@sio.event(namespace=namespace)
 def play_audio():
     global playback, audio_original, audio_timestamped
     print('receive play event')
@@ -56,15 +56,16 @@ def play_audio():
         playback = _play_with_simpleaudio(audio_original)
 
 
-@sio.event(namespace='/audio')
+@sio.event(namespace=namespace)
 def stop_audio():
     global playback
 
     print('receive stop event')
-    playback.stop()
+    if playback is not None:
+        playback.stop()
 
 
-@sio.event(namespace='/audio')
+@sio.event(namespace=namespace)
 def skip_to(seconds):
     global audio_original, playback, audio_timestamped
 
@@ -73,6 +74,29 @@ def skip_to(seconds):
         playback.stop()
         playback = _play_with_simpleaudio(audio_timestamped)
         audio_timestamped = None
+
+
+@sio.event(namespace=namespace)
+def load_audio(url: str):
+    global playback, audio_original
+    logging.info('load audio: ' + url)
+    stop_audio()
+
+    try:
+        # Fetch file from source
+        res = requests.get(os.environ['URL'] + url)
+        if res.status_code >= 300:
+            raise Exception('Status code ' + str(res.status_code), res.content)
+
+        file_name, file_extension = os.path.splitext(url)
+        logging.info('Fetched audio file. Now initializing...')
+        audio_original = AudioSegment.from_file(BytesIO(res.content), file_extension[1:])
+
+        sio.emit('load_audio_success', namespace=namespace)
+        logging.info('Audio file initialized!')
+    except Exception as e:
+        logging.error(traceback.format_exc())
+        sio.emit('load_audio_fail', namespace=namespace)
 
 
 if __name__ == '__main__':
