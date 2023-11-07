@@ -55,6 +55,8 @@ def play_audio():
     else:
         playback = _play_with_simpleaudio(audio_original)
 
+    sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
+
 
 @sio.event(namespace=namespace)
 def stop_audio():
@@ -70,7 +72,7 @@ def skip_to(seconds):
     global audio_original, playback, audio_timestamped
 
     audio_timestamped = audio_original[seconds * 1000:]
-    if playback.is_playing():
+    if playback and playback.is_playing():
         playback.stop()
         playback = _play_with_simpleaudio(audio_timestamped)
         audio_timestamped = None
