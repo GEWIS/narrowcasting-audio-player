@@ -16,7 +16,7 @@ logging.basicConfig(level=LOG_LEVEL)
 
 namespace = '/audio'
 running = True
-sio = socketio.Client()
+sio = socketio.Client(logger=True)
 audio_original: AudioSegment | None = None
 audio_timestamped: AudioSegment | None = None
 playback: PlayObject | None = None
@@ -25,7 +25,7 @@ playback: PlayObject | None = None
 def main():
     global sio, audio_original, playback, running
 
-    url = os.environ['URL'] + '/auth/mock'
+    url = os.environ['URL'] + '/api/auth/mock'
     result = requests.post(url)
     cookie = result.cookies.get('connect.sid')
 
