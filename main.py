@@ -6,6 +6,8 @@ import time
 import requests
 import logging
 import traceback
+import math
+from threading import Thread
 
 load_dotenv()
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
@@ -15,6 +17,47 @@ namespace = '/audio'
 running = True
 sio = socketio.Client(logger=True)
 player: vlc.MediaPlayer | None = None
+
+sync_thread: Thread | None = None
+sync_thread_running = False
+last_audio_sync = 0
+
+
+def sync_audio_timings():
+    global sync_thread_running, last_audio_sync
+
+    while sync_thread_running:
+        now = time.time()
+        # Synchronize every 30 seconds if audio is playing
+        if now - last_audio_sync >= 30 and player is not None and player.is_playing() and player.get_time() >= 0:
+            last_audio_sync = now
+            player_ms = player.get_time()
+            now_ms = math.floor(time.time_ns() / 1000000)
+            sio.emit('sync_audio_timings', {
+                'startTime': now_ms,
+                'timestamp': player_ms,
+            }, namespace=namespace)
+
+        time.sleep(0.1)
+
+
+def create_sync_loop():
+    global sync_thread, sync_thread_running
+
+    sync_thread_running = True
+    sync_thread = Thread(target=sync_audio_timings)
+    sync_thread.daemon = True
+    sync_thread.start()
+
+
+def stop_sync_loop():
+    global sync_thread, sync_thread_running
+
+    if sync_thread is None:
+        return
+
+    sync_thread_running = False
+    sync_thread.join()
 
 
 def main():
@@ -35,8 +78,7 @@ def main():
             time.sleep(0.5)
     except KeyboardInterrupt:
         running = False
-        if player is not None and player.is_playing():
-            player.stop()
+        stop_audio()
 
 
 @sio.event(namespace=namespace)
@@ -54,12 +96,19 @@ def play_audio(seconds=0):
 
     sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
 
+    # Start a synchronization worker
+    create_sync_loop()
+
 
 @sio.event(namespace=namespace)
 def stop_audio():
     global player
 
     logging.info('receive stop event')
+
+    # Stop the synchronization thread
+    stop_sync_loop()
+
     if player is not None:
         player.stop()
 
