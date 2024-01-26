@@ -63,13 +63,21 @@ def stop_sync_loop():
 def main():
     global sio, player, running
 
-    url = os.environ['URL'] + '/api/auth/mock'
-    result = requests.post(url)
+    url = os.environ['URL'] + '/api/auth/key'
+    result = requests.post(url, {'key': os.environ['API_KEY']})
+
+    if result.status_code != 200:
+        json = result.json()
+        raise Exception("Could not authenticate with core: [HTTP {}]: {}".format(
+            result.status_code,
+            json['details'] if json['details'] else json['message']),
+        )
+
     cookie = result.cookies.get('connect.sid')
 
     # Initialize SocketIO
-    sio.connect(os.environ['URL'], headers={'cookie_development': 'connect.sid=' + cookie},
-                namespaces=[namespace])
+    sio.connect(os.environ['URL'], headers={'cookie': 'connect.sid=' + cookie},
+                namespaces=['/', namespace])
 
     logging.info('Connected')
 
