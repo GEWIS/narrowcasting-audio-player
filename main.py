@@ -103,7 +103,7 @@ def play_audio(seconds=None):
     if player.play() < 0:
         raise Exception('Could not start playback')
 
-    if seconds:
+    if seconds is not None:
         player.set_time(seconds * 1000)
 
     sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
@@ -143,7 +143,9 @@ def load_audio(url: str):
     global player
     full_url = os.environ['URL'] + url
     logging.info('load audio: ' + full_url)
-    stop_audio()
+
+    if player:
+        player.stop()
 
     try:
         # creating a vlc instance
@@ -163,6 +165,12 @@ def load_audio(url: str):
     except Exception as e:
         logging.error(traceback.format_exc())
         sio.emit('load_audio_fail', namespace=namespace)
+
+
+@sio.event
+def disconnect():
+    if player:
+        player.stop()
 
 
 if __name__ == '__main__':
