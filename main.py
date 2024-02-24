@@ -75,8 +75,11 @@ def main():
 
     cookie = result.cookies.get('connect.sid')
 
+    def get_headers():
+        return {'cookie': 'connect.sid=' + cookie}
+
     # Initialize SocketIO
-    sio.connect(os.environ['URL'], headers={'cookie': 'connect.sid=' + cookie},
+    sio.connect(os.environ['URL'], headers=get_headers,
                 namespaces=['/', namespace])
 
     logging.info('Connected')
@@ -90,7 +93,7 @@ def main():
 
 
 @sio.event(namespace=namespace)
-def play_audio(seconds=0):
+def play_audio(seconds=None):
     global player
     logging.info('receive play event')
 
@@ -100,7 +103,8 @@ def play_audio(seconds=0):
     if player.play() < 0:
         raise Exception('Could not start playback')
 
-    player.set_time(seconds * 1000)
+    if seconds:
+        player.set_time(seconds * 1000)
 
     sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
 
@@ -118,7 +122,7 @@ def stop_audio():
     stop_sync_loop()
 
     if player is not None:
-        player.stop()
+        player.pause()
 
 
 @sio.event(namespace=namespace)
