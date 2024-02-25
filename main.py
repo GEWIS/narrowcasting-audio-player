@@ -23,6 +23,14 @@ sync_thread: Thread | None = None
 sync_thread_running = False
 last_audio_sync = 0
 
+auth_cookie = ''
+audio_listener_id = -1
+
+
+def get_headers():
+    global auth_cookie
+    return {'cookie': 'connect.sid=' + auth_cookie}
+
 
 def sync_audio_timings():
     global sync_thread_running, last_audio_sync
@@ -62,22 +70,20 @@ def stop_sync_loop():
 
 
 def main():
-    global sio, player, running
+    global sio, player, running, auth_cookie, audio_listener_id
 
-    url = os.environ['URL'] + '/api/auth/key'
+    url =  urljoin(os.environ['URL'], '/api/auth/key')
     result = requests.post(url, {'key': os.environ['API_KEY']})
 
+    json = result.json()
     if result.status_code != 200:
-        json = result.json()
         raise Exception("Could not authenticate with core: [HTTP {}]: {}".format(
             result.status_code,
             json['details'] if json['details'] else json['message']),
         )
 
-    cookie = result.cookies.get('connect.sid')
-
-    def get_headers():
-        return {'cookie': 'connect.sid=' + cookie}
+    audio_listener_id = json['audioId']
+    auth_cookie = result.cookies.get('connect.sid')
 
     # Initialize SocketIO
     sio.connect(os.environ['URL'], headers=get_headers,
@@ -91,6 +97,14 @@ def main():
     except KeyboardInterrupt:
         running = False
         stop_audio()
+
+
+def set_audio_playing(playing: bool):
+    url = urljoin(os.environ['URL'], "/api/audio/{}/playing".format(audio_listener_id))
+    try:
+        requests.post(url, { 'playing': playing }, headers=get_headers())
+    except Exception as e:
+        logging.error(e)
 
 
 @sio.event(namespace=namespace)
@@ -109,10 +123,9 @@ def play_audio(url: str, seconds=0):
     if seconds is not None:
         skip_to(seconds)
 
-    sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
-
     # Start a synchronization worker
     create_sync_loop()
+    set_audio_playing(True)
 
 
 @sio.event(namespace=namespace)
@@ -126,6 +139,8 @@ def stop_audio():
 
     if player is not None:
         player.pause()
+
+    set_audio_playing(False)
 
 
 @sio.event(namespace=namespace)
@@ -179,6 +194,8 @@ def disconnect():
     if player:
         player.stop()
         player = None
+
+    set_audio_playing(False)
 
 
 if __name__ == '__main__':
