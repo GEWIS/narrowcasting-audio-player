@@ -8,6 +8,7 @@ import logging
 import traceback
 import math
 from threading import Thread
+from urllib.parse import urljoin
 
 load_dotenv()
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
@@ -93,9 +94,11 @@ def main():
 
 
 @sio.event(namespace=namespace)
-def play_audio(seconds=None):
+def play_audio(url: str, seconds=0):
     global player
     logging.info('receive play event')
+
+    load_audio(url)
 
     if player is None:
         return
@@ -104,7 +107,7 @@ def play_audio(seconds=None):
         raise Exception('Could not start playback')
 
     if seconds is not None:
-        player.set_time(seconds * 1000)
+        skip_to(seconds)
 
     sio.emit('play_audio_started', int(time.time() * 1000), namespace=namespace)
 
@@ -134,14 +137,18 @@ def skip_to(seconds):
     if player is None:
         return
 
-    position = seconds * 1000
+    position = int(seconds * 1000)
     player.set_time(position)
 
 
-@sio.event(namespace=namespace)
 def load_audio(url: str):
     global player
-    full_url = os.environ['URL'] + url
+
+    if url.startswith('http'):
+        full_url = url
+    else:
+        full_url = urljoin(os.environ['URL'], url)
+
     logging.info('load audio: ' + full_url)
 
     if player:
@@ -160,17 +167,18 @@ def load_audio(url: str):
         # setting media to the player
         player.set_media(media)
 
-        sio.emit('load_audio_success', namespace=namespace)
         logging.info('Audio file initialized!')
     except Exception as e:
         logging.error(traceback.format_exc())
-        sio.emit('load_audio_fail', namespace=namespace)
 
 
 @sio.event
 def disconnect():
+    global player
+
     if player:
         player.stop()
+        player = None
 
 
 if __name__ == '__main__':
