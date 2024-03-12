@@ -137,7 +137,7 @@ def stop_audio():
     # Stop the synchronization thread
     stop_sync_loop()
 
-    if player is not None:
+    if player is not None and player.is_playing():
         player.pause()
 
     set_audio_playing(False)
